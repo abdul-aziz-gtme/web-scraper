@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tech Stack &amp; CRM Detector</title>
+<meta name="description" content="Type a company domain and instantly see the CRM and full tech stack it runs on. Bulk-enrich a CSV of domains too." />
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #121826;
+    --panel-2: #1a2233;
+    --border: #243049;
+    --text: #e8edf6;
+    --muted: #93a1bd;
+    --accent: #6d8bff;
+    --accent-2: #38d6a5;
+    --warn: #f5b454;
+    --err: #ff6b81;
+    --chip: #1e2942;
+    --radius: 14px;
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(1200px 600px at 70% -10%, #16213a 0%, var(--bg) 55%) fixed;
+    color: var(--text);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 40px 20px 80px; }
+  header h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -.02em; }
+  header p { color: var(--muted); margin: 0 0 24px; }
+  .logo { display:inline-flex; align-items:center; gap:10px; }
+  .logo .dot { width: 12px; height: 12px; border-radius: 50%;
+    background: conic-gradient(from 200deg, var(--accent), var(--accent-2)); box-shadow: 0 0 18px var(--accent); }
+
+  .tabs { display: inline-flex; gap: 4px; background: var(--panel); border: 1px solid var(--border);
+    padding: 4px; border-radius: 999px; margin-bottom: 18px; }
+  .tabs button { background: transparent; color: var(--muted); border: 0; cursor: pointer;
+    padding: 8px 18px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+  .tabs button.active { background: var(--panel-2); color: var(--text); box-shadow: var(--shadow); }
+
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px; box-shadow: var(--shadow); }
+
+  form.search { display: flex; gap: 10px; }
+  input[type=text] {
+    flex: 1; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 10px; padding: 14px 16px; font-size: 16px; outline: none;
+  }
+  input[type=text]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(109,139,255,.18); }
+  button.primary {
+    background: var(--accent);
+    color: #fff; border: 0; border-radius: 10px; padding: 0 22px; font-size: 15px; font-weight: 700;
+    cursor: pointer; white-space: nowrap;
+  }
+  button.primary:hover:not(:disabled) { filter: brightness(1.08); }
+  button.primary:disabled { opacity: .55; cursor: default; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
+
+  /* result */
+  #result { margin-top: 22px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; color: var(--muted);
+    font-size: 13px; margin-bottom: 14px; }
+  .status { padding: 2px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; }
+  .status.ok { background: rgba(56,214,165,.14); color: var(--accent-2); }
+  .status.partial { background: rgba(245,180,84,.14); color: var(--warn); }
+  .status.error { background: rgba(255,107,129,.14); color: var(--err); }
+
+  .crm-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 20px;
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    display: flex; align-items: center; gap: 18px; }
+  .crm-badge { width: 56px; height: 56px; border-radius: 14px; flex: none;
+    display: grid; place-items: center; font-size: 26px; }
+  .crm-badge.yes { background: rgba(56,214,165,.15); color: var(--accent-2); }
+  .crm-badge.no  { background: rgba(147,161,189,.12); color: var(--muted); }
+  .crm-card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  .crm-card .value { font-size: 24px; font-weight: 800; letter-spacing: -.01em; }
+  .crm-card .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+  .cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-top: 16px; }
+  .cat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .cat h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: var(--chip); border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 11px; font-size: 13px; }
+  .chip .ver { color: var(--muted); font-size: 11px; margin-left: 4px; }
+
+  .empty { color: var(--muted); padding: 16px 0; }
+
+  /* bulk */
+  textarea { width: 100%; min-height: 120px; resize: vertical; background: var(--panel-2);
+    border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 12px 14px;
+    font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; outline: none; }
+  textarea:focus { border-color: var(--accent); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .filebtn { display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+    background: var(--panel-2); border:1px solid var(--border); color: var(--text);
+    padding: 10px 14px; border-radius: 10px; font-size: 14px; font-weight:600; }
+  .filebtn input { display: none; }
+  .ghost { background: var(--panel-2); border:1px solid var(--border); color: var(--text);
+    padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .ghost:disabled { opacity:.5; cursor: default; }
+  .progress { color: var(--muted); font-size: 14px; margin-left: auto; }
+
+  .tablewrap { margin-top: 18px; overflow-x: auto; border:1px solid var(--border); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; background: var(--panel-2); position: sticky; top: 0; }
+  td.crm-hit { color: var(--accent-2); font-weight: 700; }
+  td.dim { color: var(--muted); }
+  tr.pending td { opacity: .55; }
+
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.25);
+    border-top-color:#fff; border-radius:50%; animation: spin .7s linear infinite; vertical-align:-2px; margin-right:6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  footer { color: var(--muted); font-size: 13px; margin-top: 26px; text-align: center; }
+  a { color: var(--accent); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo"><span class="dot"></span><h1>Tech Stack &amp; CRM Detector</h1></div>
+    <p>Drop in a company domain and see what CRM &amp; tech they run on. Or bulk-enrich a CSV.</p>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button id="tab-single" class="active" onclick="showTab('single')">Single domain</button>
+    <button id="tab-bulk" onclick="showTab('bulk')">Bulk CSV</button>
+  </div>
+
+  <!-- SINGLE -->
+  <section id="view-single" class="panel">
+    <form class="search" onsubmit="return onSearch(event)">
+      <input id="domain" type="text" placeholder="acme.com" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      <button class="primary" id="searchBtn" type="submit">Detect</button>
+    </form>
+    <div class="hint">Press Enter to detect. Tip: works with or without https:// — just the domain is fine.</div>
+    <div id="result"></div>
+  </section>
+
+  <!-- BULK -->
+  <section id="view-bulk" class="panel hidden">
+    <p style="margin:0 0 10px;color:var(--muted)">Upload a CSV (first column, or a <code>domain</code>/<code>website</code>/<code>url</code> column) or paste one domain per line.</p>
+    <textarea id="bulkInput" placeholder="hubspot.com&#10;shopify.com&#10;webflow.com"></textarea>
+    <div class="row">
+      <label class="filebtn">📄 Choose CSV<input id="csvFile" type="file" accept=".csv,text/csv,text/plain" /></label>
+      <button class="primary" id="runBulk" onclick="runBulk()">Enrich</button>
+      <button class="ghost" id="downloadBtn" onclick="downloadCsv()" disabled>Download CSV</button>
+      <span class="progress" id="bulkProgress"></span>
+    </div>
+    <div id="bulkTable"></div>
+  </section>
+
+  <footer>
+    Free &amp; no API key. Static-fetch detection — JS-rendered sites may return <em>partial</em>.
+    JSON API still lives at <a href="/api?domain=hubspot.com">/api?domain=</a>.
+  </footer>
+</div>
+
+<script>
+// ---- category display config (label + which API array field feeds it) ----
+const CATEGORIES = [
+  ["cms", "CMS / Website"],
+  ["ecommerce", "E-commerce"],
+  ["marketing", "Marketing"],
+  ["analytics", "Analytics"],
+  ["ads", "Ads / Pixels"],
+  ["chat", "Chat / Support"],
+  ["scheduler", "Scheduling"],
+  ["frameworks", "Frameworks"],
+  ["hosting", "Hosting / CDN"],
+];
+
+function showTab(which) {
+  const single = which === "single";
+  document.getElementById("tab-single").classList.toggle("active", single);
+  document.getElementById("tab-bulk").classList.toggle("active", !single);
+  document.getElementById("view-single").classList.toggle("hidden", !single);
+  document.getElementById("view-bulk").classList.toggle("hidden", single);
+}
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// strip scheme / path / whitespace -> bare host (lowercased)
+function cleanDomain(raw) {
+  let d = String(raw || "").trim();
+  if (!d) return "";
+  d = d.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+  d = d.split(/[\/?#]/)[0];
+  return d.trim().toLowerCase();
+}
+
+async function detect(domain) {
+  const res = await fetch("/api?domain=" + encodeURIComponent(domain), { headers: { accept: "application/json" } });
+  return res.json(); // API always returns 200 JSON with a `status` field
+}
+
+// ---------- SINGLE ----------
+async function onSearch(e) {
+  e.preventDefault();
+  const input = document.getElementById("domain");
+  const domain = cleanDomain(input.value);
+  const out = document.getElementById("result");
+  const btn = document.getElementById("searchBtn");
+  if (!domain) { out.innerHTML = '<div class="empty">Enter a domain first.</div>'; return false; }
+
+  btn.disabled = true;
+  out.innerHTML = '<div class="empty"><span class="spin"></span>Detecting ' + esc(domain) + '…</div>';
+  try {
+    const data = await detect(domain);
+    out.innerHTML = renderResult(data, domain);
+  } catch (err) {
+    out.innerHTML = '<div class="empty">Couldn’t reach the detector: ' + esc(err.message || err) + '</div>';
+  } finally {
+    btn.disabled = false;
+  }
+  return false;
+}
+
+function renderResult(data, domain) {
+  const status = data.status || "error";
+  if (status === "error") {
+    return '<div class="meta"><span class="status error">error</span> ' + esc(data.domain || domain) + '</div>'
+      + '<div class="empty">' + esc(data.error || "Couldn’t analyze this domain.") + '</div>';
+  }
+
+  const crmList = Array.isArray(data.crm) ? data.crm : [];
+  const crmPrimary = data.crm_primary || crmList[0] || null;
+  const hasCrm = !!crmPrimary;
+  const secondary = crmList.filter(c => c !== crmPrimary);
+
+  let html = "";
+  html += '<div class="meta">';
+  html += '<span class="status ' + esc(status) + '">' + esc(status) + '</span>';
+  if (data.final_url) html += '<span>' + esc(data.final_url) + '</span>';
+  html += '</div>';
+
+  // CRM hero card (with the "additional field": CRM detected? yes/no)
+  html += '<div class="crm-card">';
+  html += '<div class="crm-badge ' + (hasCrm ? "yes" : "no") + '">' + (hasCrm ? "✓" : "—") + '</div>';
+  html += '<div>';
+  html += '<div class="label">CRM ' + (hasCrm ? "detected" : "not detected") + '</div>';
+  html += '<div class="value">' + (hasCrm ? esc(crmPrimary) : "No CRM found") + '</div>';
+  if (secondary.length) html += '<div class="sub">Also: ' + secondary.map(esc).join(", ") + '</div>';
+  else if (!hasCrm) html += '<div class="sub">No CRM signature in the page’s static markup.</div>';
+  html += '</div></div>';
+
+  // The rest of the stack, grouped
+  let cats = "";
+  for (const [key, label] of CATEGORIES) {
+    const arr = Array.isArray(data[key]) ? data[key] : [];
+    if (!arr.length) continue;
+    cats += '<div class="cat"><h3>' + esc(label) + '</h3><div class="chips">'
+      + arr.map(v => '<span class="chip">' + esc(v) + '</span>').join("")
+      + '</div></div>';
+  }
+  if (cats) html += '<div class="cats">' + cats + '</div>';
+  else if (status === "partial") html += '<div class="empty" style="margin-top:14px">Page loaded but no further tech matched (often a JS-rendered site).</div>';
+
+  return html;
+}
+
+// ---------- BULK ----------
+let bulkResults = []; // {domain, status, crm, cms, analytics, hosting, frameworks}
+
+// minimal CSV line parser (handles quotes/commas within first row to find header)
+function parseCsvLine(line) {
+  const out = []; let cur = ""; let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') q = false;
+      else cur += ch;
+    } else {
+      if (ch === '"') q = true;
+      else if (ch === ",") { out.push(cur); cur = ""; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function extractDomains(text) {
+  const lines = String(text || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  // detect header row and a domain-ish column
+  const first = parseCsvLine(lines[0]).map(c => c.trim().toLowerCase());
+  let colIdx = 0, startRow = 0;
+  const named = ["domain", "website", "url", "company domain", "site"];
+  const hit = first.findIndex(c => named.includes(c));
+  if (hit !== -1) { colIdx = hit; startRow = 1; }
+  const seen = new Set(); const domains = [];
+  for (let r = startRow; r < lines.length; r++) {
+    const cells = parseCsvLine(lines[r]);
+    const d = cleanDomain(cells[colIdx] ?? cells[0] ?? "");
+    if (d && d.includes(".") && !seen.has(d)) { seen.add(d); domains.push(d); }
+  }
+  return domains;
+}
+
+document.getElementById("csvFile").addEventListener("change", function () {
+  const f = this.files && this.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => { document.getElementById("bulkInput").value = reader.result; };
+  reader.readAsText(f);
+});
+
+async function runBulk() {
+  const domains = extractDomains(document.getElementById("bulkInput").value);
+  const runBtn = document.getElementById("runBulk");
+  const dlBtn = document.getElementById("downloadBtn");
+  const prog = document.getElementById("bulkProgress");
+  const tableEl = document.getElementById("bulkTable");
+
+  if (!domains.length) { tableEl.innerHTML = '<div class="empty">No valid domains found.</div>'; return; }
+
+  bulkResults = domains.map(d => ({ domain: d, status: "queued", crm: "", cms: "", analytics: "", hosting: "", frameworks: "" }));
+  runBtn.disabled = true; dlBtn.disabled = true;
+  renderBulkTable();
+
+  let done = 0;
+  const update = () => { prog.textContent = done + " / " + domains.length + " done"; };
+  update();
+
+  // concurrency pool
+  const CONCURRENCY = 5;
+  let cursor = 0;
+  async function worker() {
+    while (cursor < bulkResults.length) {
+      const i = cursor++;
+      const row = bulkResults[i];
+      row.status = "…";
+      renderBulkTable();
+      try {
+        const data = await detect(row.domain);
+        row.status = data.status || "error";
+        row.crm = data.crm_primary || (Array.isArray(data.crm) ? data.crm[0] : "") || "";
+        row.cms = data.cms_primary || (Array.isArray(data.cms) ? data.cms[0] : "") || "";
+        row.analytics = (Array.isArray(data.analytics) ? data.analytics : []).join(", ");
+        row.hosting = (Array.isArray(data.hosting) ? data.hosting : []).join(", ");
+        row.frameworks = (Array.isArray(data.frameworks) ? data.frameworks : []).join(", ");
+      } catch (e) {
+        row.status = "error";
+      }
+      done++; update(); renderBulkTable();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, bulkResults.length) }, worker));
+
+  runBtn.disabled = false; dlBtn.disabled = false;
+  prog.textContent = "Done — " + domains.length + " domains.";
+}
+
+function renderBulkTable() {
+  const cols = [
+    ["domain", "Domain"], ["status", "Status"], ["crm", "CRM"], ["cms", "CMS"],
+    ["analytics", "Analytics"], ["hosting", "Hosting"], ["frameworks", "Frameworks"],
+  ];
+  let h = '<div class="tablewrap"><table><thead><tr>';
+  h += cols.map(c => "<th>" + esc(c[1]) + "</th>").join("");
+  h += "</tr></thead><tbody>";
+  for (const row of bulkResults) {
+    const pending = row.status === "queued" || row.status === "…";
+    h += '<tr class="' + (pending ? "pending" : "") + '">';
+    for (const [k] of cols) {
+      const v = row[k] ?? "";
+      let cls = "";
+      if (k === "crm") cls = v ? "crm-hit" : "dim";
+      else if (!v) cls = "dim";
+      h += '<td class="' + cls + '">' + (v ? esc(v) : (k === "domain" ? esc(v) : "—")) + "</td>";
+    }
+    h += "</tr>";
+  }
+  h += "</tbody></table></div>";
+  document.getElementById("bulkTable").innerHTML = h;
+}
+
+function csvCell(v) {
+  const s = String(v == null ? "" : v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function downloadCsv() {
+  if (!bulkResults.length) return;
+  const cols = ["domain", "status", "crm", "cms", "analytics", "hosting", "frameworks"];
+  const header = ["domain", "status", "crm", "cms", "analytics", "hosting", "frameworks"];
+  const lines = [header.join(",")];
+  for (const row of bulkResults) lines.push(cols.map(c => csvCell(row[c])).join(","));
+  const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "techstack-enriched.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+</script>
+</body>
+</html>
