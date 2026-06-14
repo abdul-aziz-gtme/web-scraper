@@ -5,7 +5,7 @@ tools in its stack — **including whether the site runs HubSpot** (CRM, CMS Hub
 marketing tracking) — and returns JSON. Built for cold-outbound enrichment (e.g.
 Clay's *HTTP API* step), but usable from anything that can make a GET request.
 
-- **Runtime:** TypeScript on **Vercel Edge Functions** (global, fast cold start).
+- **Runtime:** TypeScript on **Vercel Functions** (Node 20 serverless).
 - **Detection engine:** `src/core/` — identical to the Cloudflare Worker build, so
   results match across both hosts.
 - **Cost:** $0 on Vercel's Hobby tier. No paid APIs.
