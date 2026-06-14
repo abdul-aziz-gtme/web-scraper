@@ -4,6 +4,8 @@
 // each capped, well under the Workers 50-subrequest limit. Network wait is free
 // CPU-wise; only the later regex matching costs the 10ms budget.
 
+import { assertPublicUrl, assertHostResolvesPublic } from "./ssrfGuard.js";
+
 const MAX_JS_FILES = 3;
 const MAX_JS_BYTES = 256 * 1024;
 const JS_FETCH_TIMEOUT_MS = 6_000;
@@ -33,10 +35,20 @@ function pickScripts(scriptSrcs: string[], finalUrl: string): string[] {
 }
 
 async function fetchOne(url: string): Promise<string | null> {
+  // SSRF guard: validate the asset URL too, and don't follow redirects here
+  // (these are already first-party same-origin bundles — a 3xx is not worth
+  // chasing and could point off-host).
+  try {
+    const u = assertPublicUrl(url);
+    await assertHostResolvesPublic(u.hostname);
+  } catch {
+    return null;
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), JS_FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
+      redirect: "manual",
       signal: controller.signal,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; techstack-detector)" },
     });

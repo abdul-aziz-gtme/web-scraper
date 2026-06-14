@@ -5,6 +5,7 @@
 // throwing, so a single bad domain never breaks a batch.
 
 import { extractRefs } from "./extractRefs.js";
+import { assertPublicUrl, assertHostResolvesPublic } from "./ssrfGuard.js";
 import type { FetchedDoc } from "./types.js";
 
 const BROWSER_UA =
@@ -13,6 +14,7 @@ const BROWSER_UA =
 
 const MAX_HTML_BYTES = 768 * 1024; // ~768KB cap on homepage HTML
 const FETCH_TIMEOUT_MS = 12_000; // well under Clay's 30s wall-clock
+const MAX_REDIRECTS = 5; // follow redirects manually so we can re-check each hop
 
 export interface FetchOptions {
   timeoutMs?: number;
@@ -118,17 +120,42 @@ export async function fetchDoc(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        "User-Agent": BROWSER_UA,
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
-    base.finalUrl = res.url || url;
+    // SSRF defense: follow redirects ourselves so the guard runs on every hop —
+    // a public site must not be able to 30x-redirect us into the internal network.
+    let currentUrl = url;
+    let res: Response | null = null;
+    for (let hop = 0; ; hop++) {
+      const target = assertPublicUrl(currentUrl); // scheme + IP/host literal checks
+      await assertHostResolvesPublic(target.hostname); // DNS-resolves-public (Node)
+
+      res = await fetch(currentUrl, {
+        method: "GET",
+        redirect: "manual",
+        signal: controller.signal,
+        headers: {
+          "User-Agent": BROWSER_UA,
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      });
+
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get("location");
+        try {
+          await res.body?.cancel();
+        } catch {
+          /* ignore */
+        }
+        if (!loc) break; // 3xx without Location — treat as the final response
+        if (hop >= MAX_REDIRECTS) throw new Error("too many redirects");
+        currentUrl = new URL(loc, currentUrl).toString();
+        continue;
+      }
+      break; // non-redirect — this is the response we read
+    }
+    if (!res) throw new Error("no response");
+
+    base.finalUrl = currentUrl;
     base.httpStatus = res.status;
     base.headers = headersToRecord(res.headers);
     base.cookies = parseCookies(res.headers);

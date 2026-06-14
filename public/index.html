@@ -389,7 +389,11 @@ function renderBulkTable() {
 }
 
 function csvCell(v) {
-  const s = String(v == null ? "" : v);
+  let s = String(v == null ? "" : v);
+  // Neutralize spreadsheet formula injection: a cell starting with = + - @ (or a
+  // control char) can execute as a formula when the CSV is opened in Excel/Sheets.
+  // Prefixing with a single quote forces it to be treated as text.
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
