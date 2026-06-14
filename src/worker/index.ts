@@ -91,6 +91,7 @@ export default {
         {
           domain: raw,
           status: "error",
+          http_status: null,
           error: e instanceof Error ? e.message : String(e),
           cms: [],
           cms_primary: null,

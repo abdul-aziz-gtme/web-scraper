@@ -41,6 +41,7 @@ export async function detect(
       [],
       doc.error ?? "fetch failed",
       fetchedAt,
+      doc.httpStatus ?? null,
     );
   }
 
@@ -62,5 +63,6 @@ export async function detect(
     techs,
     null,
     fetchedAt,
+    doc.httpStatus ?? null,
   );
 }

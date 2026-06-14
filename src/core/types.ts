@@ -81,6 +81,7 @@ export interface DetectResult {
   domain: string;
   final_url: string;
   status: Status;
+  http_status: number | null; // HTTP status of the fetched page (null if no response)
   fetched_at: string;
   cms: string[];
   cms_primary: string | null;

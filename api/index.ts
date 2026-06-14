@@ -125,6 +125,7 @@ export default async function handler(
     res.status(200).json({
       domain: raw,
       status: "error",
+      http_status: null,
       error: e instanceof Error ? e.message : String(e),
       cms: [],
       cms_primary: null,

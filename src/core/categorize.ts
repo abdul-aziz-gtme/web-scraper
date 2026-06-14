@@ -39,6 +39,7 @@ export function categorize(
   techs: ResolvedTech[],
   error: string | null,
   fetchedAt: string,
+  httpStatus: number | null = null,
 ): DetectResult {
   const all: Detected[] = techs.map((t) => {
     const d: Detected = {
@@ -57,6 +58,7 @@ export function categorize(
     domain,
     final_url: finalUrl,
     status,
+    http_status: httpStatus,
     fetched_at: fetchedAt,
     cms,
     cms_primary: cms[0] ?? null,

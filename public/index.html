@@ -91,6 +91,15 @@
 
   .empty { color: var(--muted); padding: 16px 0; }
 
+  /* explanation banner ("why is this thin?") */
+  .note { margin-top: 14px; border-radius: 12px; padding: 12px 14px; font-size: 14px;
+    display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--border); }
+  .note .ico { flex: none; font-size: 16px; line-height: 1.4; }
+  .note.info { background: rgba(109,139,255,.10); border-color: rgba(109,139,255,.35); }
+  .note.warn { background: rgba(245,180,84,.10); border-color: rgba(245,180,84,.35); }
+  .note.err  { background: rgba(255,107,129,.10); border-color: rgba(255,107,129,.35); }
+  td.note-cell { white-space: normal; color: var(--muted); max-width: 280px; }
+
   /* bulk */
   textarea { width: 100%; min-height: 120px; resize: vertical; background: var(--panel-2);
     border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 12px 14px;
@@ -227,11 +236,43 @@ async function onSearch(e) {
   return false;
 }
 
+// Explain WHY a result is thin/blocked so a sparse row isn't a mystery.
+// Returns { tone: "info"|"warn"|"err", short, long } — or { short:"" } when the
+// detection is healthy and needs no explanation.
+function explain(data) {
+  const status = data.status || "error";
+  const http = data.http_status || null;
+  if (status === "error") {
+    const e = String(data.error || "");
+    if (/^blocked:/i.test(e)) return { tone: "err", short: "Blocked (SSRF guard)", long: "This host was blocked by the SSRF guard — it isn’t a public website." };
+    if (/timeout|abort/i.test(e)) return { tone: "err", short: "Timed out", long: "The site didn’t respond in time, so nothing could be read." };
+    return { tone: "err", short: "Fetch failed", long: "We couldn’t fetch this site" + (e ? ": " + e : ".") };
+  }
+  if (status === "partial") {
+    if (http === 403 || http === 401) return { tone: "warn", short: "Blocked by site (HTTP " + http + ")", long: "The site blocked our request (HTTP " + http + ") — almost always bot protection. Only header-level signals (e.g. the CDN) were visible." };
+    if (http === 429) return { tone: "warn", short: "Rate-limited (HTTP 429)", long: "The site rate-limited our request (HTTP 429), so only limited signals were available." };
+    if (http && http >= 400) return { tone: "warn", short: "HTTP " + http, long: "The site responded with HTTP " + http + ", so only limited signals were available." };
+    return { tone: "warn", short: "Limited signal", long: "Only limited signals were available — often a JS-rendered site whose tools load after the page does." };
+  }
+  // status ok — flag when nothing meaningful (martech/CRM) was found.
+  const cats = ["cms", "crm", "ecommerce", "analytics", "marketing", "chat", "ads", "scheduler"];
+  const any = cats.some(k => Array.isArray(data[k]) && data[k].length);
+  if (!any) return { tone: "info", short: "No martech in static HTML", long: "The page loaded fine, but no CMS/CRM/martech fingerprints were in the static HTML. Large sites often load these later via JavaScript or a tag manager, which a static scan can’t see — and back-office CRMs (Salesforce/SAP) leave no public-page trace." };
+  return { tone: "info", short: "", long: "" };
+}
+
 function renderResult(data, domain) {
   const status = data.status || "error";
+  const why = explain(data);
+  const banner = why.long
+    ? '<div class="note ' + (why.tone === "err" ? "err" : why.tone === "warn" ? "warn" : "info")
+      + '"><span class="ico">' + (why.tone === "err" ? "⛔" : why.tone === "warn" ? "⚠️" : "ℹ️")
+      + '</span><span>' + esc(why.long) + '</span></div>'
+    : "";
+
   if (status === "error") {
     return '<div class="meta"><span class="status error">error</span> ' + esc(data.domain || domain) + '</div>'
-      + '<div class="empty">' + esc(data.error || "Couldn’t analyze this domain.") + '</div>';
+      + banner;
   }
 
   const crmList = Array.isArray(data.crm) ? data.crm : [];
@@ -244,6 +285,7 @@ function renderResult(data, domain) {
   html += '<span class="status ' + esc(status) + '">' + esc(status) + '</span>';
   if (data.final_url) html += '<span>' + esc(data.final_url) + '</span>';
   html += '</div>';
+  html += banner;
 
   // CRM hero card (with the "additional field": CRM detected? yes/no)
   html += '<div class="crm-card">';
@@ -265,7 +307,6 @@ function renderResult(data, domain) {
       + '</div></div>';
   }
   if (cats) html += '<div class="cats">' + cats + '</div>';
-  else if (status === "partial") html += '<div class="empty" style="margin-top:14px">Page loaded but no further tech matched (often a JS-rendered site).</div>';
 
   return html;
 }
@@ -327,7 +368,7 @@ async function runBulk() {
 
   if (!domains.length) { tableEl.innerHTML = '<div class="empty">No valid domains found.</div>'; return; }
 
-  bulkResults = domains.map(d => ({ domain: d, status: "queued", crm: "", cms: "", analytics: "", hosting: "", frameworks: "" }));
+  bulkResults = domains.map(d => ({ domain: d, status: "queued", crm: "", cms: "", analytics: "", hosting: "", frameworks: "", note: "" }));
   runBtn.disabled = true; dlBtn.disabled = true;
   renderBulkTable();
 
@@ -352,8 +393,10 @@ async function runBulk() {
         row.analytics = (Array.isArray(data.analytics) ? data.analytics : []).join(", ");
         row.hosting = (Array.isArray(data.hosting) ? data.hosting : []).join(", ");
         row.frameworks = (Array.isArray(data.frameworks) ? data.frameworks : []).join(", ");
+        row.note = explain(data).short;
       } catch (e) {
         row.status = "error";
+        row.note = "Couldn’t reach the detector";
       }
       done++; update(); renderBulkTable();
     }
@@ -368,6 +411,7 @@ function renderBulkTable() {
   const cols = [
     ["domain", "Domain"], ["status", "Status"], ["crm", "CRM"], ["cms", "CMS"],
     ["analytics", "Analytics"], ["hosting", "Hosting"], ["frameworks", "Frameworks"],
+    ["note", "Notes"],
   ];
   let h = '<div class="tablewrap"><table><thead><tr>';
   h += cols.map(c => "<th>" + esc(c[1]) + "</th>").join("");
@@ -378,9 +422,10 @@ function renderBulkTable() {
     for (const [k] of cols) {
       const v = row[k] ?? "";
       let cls = "";
-      if (k === "crm") cls = v ? "crm-hit" : "dim";
+      if (k === "note") cls = "note-cell";
+      else if (k === "crm") cls = v ? "crm-hit" : "dim";
       else if (!v) cls = "dim";
-      h += '<td class="' + cls + '">' + (v ? esc(v) : (k === "domain" ? esc(v) : "—")) + "</td>";
+      h += '<td class="' + cls + '">' + (v ? esc(v) : (k === "domain" || k === "note" ? esc(v) : "—")) + "</td>";
     }
     h += "</tr>";
   }
@@ -399,8 +444,8 @@ function csvCell(v) {
 
 function downloadCsv() {
   if (!bulkResults.length) return;
-  const cols = ["domain", "status", "crm", "cms", "analytics", "hosting", "frameworks"];
-  const header = ["domain", "status", "crm", "cms", "analytics", "hosting", "frameworks"];
+  const cols = ["domain", "status", "crm", "cms", "analytics", "hosting", "frameworks", "note"];
+  const header = cols.slice();
   const lines = [header.join(",")];
   for (const row of bulkResults) lines.push(cols.map(c => csvCell(row[c])).join(","));
   const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
