@@ -1,0 +1,18 @@
+# The hosted API only needs api/ + src/core/. Keep everything else out of the
+# deployment bundle so Vercel doesn't mis-detect this as a Python project and so
+# uploads stay small.
+.tmp/
+tools/
+workflows/
+build/
+.wrangler/
+node_modules/
+requirements.txt
+*.py
+.env
+.env.example
+credentials.json
+token.json
+src/cli/
+src/worker/
+**/*.test.ts

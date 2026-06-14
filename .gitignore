@@ -1,0 +1,28 @@
+# Secrets & credentials — NEVER commit these
+.env
+credentials.json
+token.json
+
+# Temporary / regenerable processing files
+.tmp/
+!.tmp/.gitkeep
+
+# Node / TypeScript
+node_modules/
+.wrangler/
+.vercel/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

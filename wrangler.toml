@@ -1,0 +1,14 @@
+# Cloudflare Worker config. Deploys to a free *.workers.dev subdomain.
+#   npx wrangler dev      # local, production-accurate runtime (checks 10ms CPU)
+#   npx wrangler deploy   # publish to the free tier
+name = "techstack-detector"
+main = "src/worker/index.ts"
+compatibility_date = "2024-09-23"
+workers_dev = true
+
+# Surface CPU-limit overages in local dev logs.
+[observability]
+enabled = true
+
+# NB: the free plan enforces the 10ms CPU limit automatically and rejects an
+# explicit [limits] cpu_ms block, so we don't declare one here.
