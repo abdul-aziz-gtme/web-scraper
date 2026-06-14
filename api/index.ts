@@ -51,6 +51,22 @@ export default async function handler(
     return;
   }
 
+  // Landing/root: no domain to detect, so return usage instead of a 400 that
+  // would make the site look broken when opened in a browser.
+  if (first(q.__root) === "1" && !first(q.domain) && !first(q.url)) {
+    res.status(200).json({
+      service: "techstack-detector",
+      status: "ok",
+      usage: {
+        detect: "/api?domain=acme.com",
+        detect_with_assets: "/api?domain=acme.com&assets=1",
+        pretty_path: "/acme.com",
+        health: "/health",
+      },
+    });
+    return;
+  }
+
   const raw = first(q.domain) ?? first(q.url);
   if (!raw) {
     res
