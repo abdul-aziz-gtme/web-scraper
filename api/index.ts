@@ -34,17 +34,29 @@ function json(body: unknown, status = 200): Response {
 export default async function handler(request: Request): Promise<Response> {
   const url = new URL(request.url);
 
-  // Normalize the path so the same logic works whether the request hit `/`,
-  // `/api`, or was rewritten through `/api/...` by vercel.json.
-  const path = url.pathname.replace(/^\/api(?=\/|$)/, "") || "/";
+  // vercel.json routes rewrite every request to `/api/index` and pass the real
+  // intent via the query string (`__health=1`, `domain=...`). We also still
+  // support the raw path (`/health`, `/acme.com`) so the function behaves the
+  // same under plain rewrites or local `vercel dev`.
+  const pathTail = url.pathname.replace(/^\/api(?=\/|$)/, "").replace(/^\//, "");
 
-  if (path === "/health") return json({ ok: true });
+  if (url.searchParams.get("__health") === "1" || pathTail === "health") {
+    return json({ ok: true });
+  }
 
-  // Accept ?domain= or ?url=; also tolerate the domain as the path (/acme.com).
+  // Path-as-domain fallback: only treat the path as a domain when it actually
+  // looks like one (contains a dot) and isn't the internal `api/index` target,
+  // so hitting `/` with no domain doesn't get mistaken for a hostname.
+  const pathDomain =
+    pathTail && pathTail.includes(".") && pathTail !== "api/index"
+      ? decodeURIComponent(pathTail)
+      : null;
+
+  // Accept ?domain= or ?url=; fall back to the path.
   const raw =
     url.searchParams.get("domain") ??
     url.searchParams.get("url") ??
-    (path.length > 1 ? decodeURIComponent(path.slice(1)) : null);
+    pathDomain;
 
   if (!raw) {
     return json(

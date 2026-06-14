@@ -1,8 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [
-    { "source": "/", "destination": "/api" },
-    { "source": "/health", "destination": "/api" },
-    { "source": "/((?!api(?:/|$)).+)", "destination": "/api" }
+  "builds": [
+    { "src": "api/index.ts", "use": "@vercel/node" }
+  ],
+  "routes": [
+    { "src": "/health/?", "dest": "/api/index?__health=1" },
+    { "src": "/api/health/?", "dest": "/api/index?__health=1" },
+    { "src": "/(.+\\..+)", "dest": "/api/index?domain=$1" },
+    { "src": "/(.*)", "dest": "/api/index" }
   ]
 }
