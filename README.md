@@ -16,7 +16,7 @@ CLAUDE.md       # Agent operating instructions
 ```bash
 python -m venv .venv            # optional but recommended
 .venv\Scripts\activate          # Windows (PowerShell: .venv\Scripts\Activate.ps1)
-pip install -r requirements.txt
+pip install -r tools/requirements.txt
 cp .env.example .env            # then edit values as needed
 ```
 
