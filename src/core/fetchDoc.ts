@@ -57,7 +57,12 @@ async function readCapped(res: Response, maxBytes: number): Promise<string> {
     off += c.byteLength;
     if (off >= total) break;
   }
-  return new TextDecoder("utf-8", { fatal: false }).decode(merged);
+  // Both options spelled out so this type-checks under every runtime's
+  // TextDecoder typings (DOM, Node, and @cloudflare/workers-types — the last of
+  // which requires `ignoreBOM`). Values are the defaults; behaviour is unchanged.
+  return new TextDecoder("utf-8", { fatal: false, ignoreBOM: false }).decode(
+    merged,
+  );
 }
 
 function headersToRecord(h: Headers): Record<string, string> {

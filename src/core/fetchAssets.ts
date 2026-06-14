@@ -64,7 +64,11 @@ async function fetchOne(url: string): Promise<string | null> {
       merged.set(c.subarray(0, Math.min(c.byteLength, merged.length - off)), off);
       off += c.byteLength;
     }
-    return new TextDecoder("utf-8", { fatal: false }).decode(merged);
+    // ignoreBOM spelled out too, so this type-checks under @cloudflare/workers-types
+    // (which requires it) as well as DOM/Node. Values are the defaults.
+    return new TextDecoder("utf-8", { fatal: false, ignoreBOM: false }).decode(
+      merged,
+    );
   } catch {
     return null;
   } finally {
